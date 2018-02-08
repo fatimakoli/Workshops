@@ -1,0 +1,91 @@
+---
+title: "CensusAnalysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Merge Population Records and Person Records and Check Against Estimates
+```{r}
+rm(list=ls(all=TRUE)) 
+
+#install.packages("dplyr", dependencies=TRUE)
+#install.packages("ggplot2", dependencies=TRUE)
+
+library(ggplot2)
+library(dplyr)
+
+#read in data 
+poprecords <- read.csv("csv_pms/ss16pms.csv", header=TRUE)
+housingrecords <- read.csv("csv_hms/ss16hms.csv", header=TRUE)
+
+#merging 
+poprecords <- poprecords[order(poprecords$SERIALNO),]
+housingrecords <- housingrecords[order(housingrecords$SERIALNO),]
+popHousing <- left_join(poprecords, housingrecords, by="SERIALNO")
+
+#total population
+sum(poprecords$PWGTP)
+
+#housing unit pop [relp 0-15]
+housingunitpop <- filter(popHousing, RELP <= 15)
+sum(housingunitpop$PWGTP[housingunitpop$TYPE ==1])
+
+#total males, total females 
+sum(poprecords$PWGTP[poprecords$SEX==1])
+femalepop = sum(poprecords$PWGTP[poprecords$SEX==2])
+
+#age 0-4
+sum(poprecords$PWGTP[poprecords$AGEP<=4])
+
+#renter occupied units
+sum(housingrecords$WGTP[housingrecords$TEN>=3], na.rm=TRUE)    
+
+```
+```{r}
+require(dplyr)  
+df <- filter(popHousing, SEX == 2)
+sum(df$PWGTP)
+nrow(df)
+n_distinct(popHousing$PUMA.x)
+
+whitewomen <- select(filter(df, RAC1P==1), PWGTP, PUMA.x)
+whitewomen <- (whitewomen %>% group_by(PUMA.x) %>% summarise(sum(PWGTP)))
+#totalwhitewomen = sum(whitewomen$`sum(PWGTP)`)
+
+privins <- select(filter(df, HICOV==1 & RAC1P==1), PWGTP, PUMA.x)
+privins <- (privins %>% group_by(PUMA.x) %>% summarise(sum(PWGTP)))
+
+x <- merge(privins, whitewomen, by = "PUMA.x")
+x$healthinsW = x$`sum(PWGTP).x`/x$`sum(PWGTP).y`
+x <- select(x, PUMA.x, healthinsW)
+
+white <- select(filter(df, RAC1P==1), PWGTP, PUMA.x, ESR)
+unemp <- select(filter(white, ESR==3), PWGTP, PUMA.x)
+#test <- filter(unemp, PUMA.x==700)
+unemp <- (unemp %>% group_by(PUMA.x) %>% summarise(sum(PWGTP)))
+civforce <- select(filter(white, ESR==1 | ESR==2 | ESR==3), PWGTP, PUMA.x)
+civforce <- (civforce %>% group_by(PUMA.x) %>% summarise(sum(PWGTP)))
+
+y <- merge(unemp, civforce, by = "PUMA.x")
+y$unemprateW = (y$`sum(PWGTP).x`/y$`sum(PWGTP).y`)
+y <- select(y, PUMA.x, unemprateW)
+
+final <- merge(x,y,by="PUMA.x")
+
+civ1 <- select(filter(df, FES==7 & RAC1P==1 & (FPARC==1 | FPARC==2 | FPARC==3)), PWGTP, PUMA.x)
+civ1 <- (civ1 %>% group_by(PUMA.x) %>% summarise(sum(PWGTP)))
+z <- merge(civ1, whitewomen, by = "PUMA.x")
+z$singlemotW= z$`sum(PWGTP).x`/z$`sum(PWGTP).y`
+z <- select(z, PUMA.x, singlemotW)
+
+final <- merge(final,z,by="PUMA.x")
+
+write.csv(final, file ="workshop2.csv")
+```
+
+
+
+
